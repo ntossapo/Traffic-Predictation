@@ -5,6 +5,8 @@ import (
 	"gopkg.in/mgo.v2"
 	"log"
 	"gopkg.in/mgo.v2/bson"
+	"unicode/utf8"
+	"strconv"
 )
 
 type Last struct {
@@ -21,13 +23,20 @@ type Model struct {
 	Parent	[]LatLng	`bson:"parent"`
 }
 
+type Polyline struct {
+	polyline	string	`bson:"polyline" json:"polyline"`
+}
+
 func main(){
-	iris.Get("/map", func (ctx *iris.Context){
-		if err := ctx.Render("map.html", nil); err != nil {
+	iris.Config.Render.Template.IsDevelopment = true
+	iris.Get("/map/:branch", func (ctx *iris.Context){
+		b := ctx.Param("branch")
+		if err := ctx.Render("map.html", map[string]string{"branch":b}); err != nil {
 			iris.Logger.Printf(err.Error())
 		}
 	})
-	iris.Get("/map/cover", func(ctx *iris.Context){
+
+	iris.Get("/cover", func(ctx *iris.Context){
 		if err := ctx.Render("map-cover.html", nil); err != nil {
 			iris.Logger.Printf(err.Error())
 		}
@@ -35,12 +44,40 @@ func main(){
 
 	iris.StaticWeb("/jquery", "./templates/jquery-3.1.0.min.js", 1)
 
-	iris.Get("/api/intersection", func(ctx *iris.Context){
+	iris.Get("/api/coverage", func(ctx *iris.Context){
 		session, err := mgo.Dial("127.0.0.1")
 		if err != nil {
 			panic(err)
 		}
 		defer session.Close()
+
+		// Optional. Switch the session to a monotonic behavior.
+		session.SetMode(mgo.Monotonic, true)
+
+		c := session.DB("GoTrafficQueue").C("polyline")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		polylines := []map[string]string{}
+		c.Find(nil).Select(bson.M{"polyline":1, "_id":0}).All(&polylines)
+		ctx.JSON(iris.StatusOK, polylines)
+	})
+
+	iris.Get("/api/intersection/:branch", func(ctx *iris.Context){
+		session, err := mgo.Dial("127.0.0.1")
+		if err != nil {
+			panic(err)
+		}
+		defer session.Close()
+
+		b := ctx.Param("branch")
+		if utf8.RuneCountInString(b) <= 0{
+			b = "2"
+		}
+		if _, err := strconv.Atoi(b) ; err != nil{
+			b = "2"
+		}
 
 		// Optional. Switch the session to a monotonic behavior.
 		session.SetMode(mgo.Monotonic, true)
@@ -51,7 +88,7 @@ func main(){
 		}
 
 		model := []Model{}
-		c.Find(bson.M{"$where":"this.parent.length > 2"}).All(&model)
+		c.Find(bson.M{"$where":"this.parent.length > " + b}).All(&model)
 		ctx.JSON(iris.StatusOK, model)
 	})
 

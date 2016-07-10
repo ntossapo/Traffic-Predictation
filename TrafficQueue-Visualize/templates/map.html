@@ -7,6 +7,7 @@
         height: 650px;
       }
     </style>
+    <title>Map with Marker that branch > than {{ .branch }}</title>
 </head>
 <body>
 <div id="map"></div>
@@ -35,7 +36,7 @@
             polyline.setMap(map)
           });
 
-          $.get("/api/intersection",  function(data){
+          $.get("/api/intersection/{{ .branch }}",  function(data){
             console.log(data.length)
             for (var i = 0 ; i < data.length ; i++){
               var marker = new google.maps.Marker({
