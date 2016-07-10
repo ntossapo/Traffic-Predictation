@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #map {
+            width: 100%;
+            height: 650px;
+        }
+    </style>
+    <title>Map with Marker that branch > than {{ .branch }}</title>
+</head>
+<body>
+<div id="map"></div>
+<script>
+    function initMap() {
+        var mapDiv = document.getElementById('map');
+        var map = new google.maps.Map(mapDiv, {
+            center: {lat: 7.971806, lng: 98.3385094},
+            zoom:11
+        });
+
+        var polyline = null;
+        var markers = [];
+        var branch = [];
+        var oldBranch = 0;
+        setInterval(function(){
+            if(polyline != null)
+                polyline.setMap(null);
+
+            $.get("/api/last", function(data){
+                polyline = new google.maps.Polyline({
+                    path: google.maps.geometry.encoding.decodePath(data.Last),
+                    geodesic: true,
+                    strokeColor: '#FF0000',
+                    strokeOpacity: 1.0,
+                    strokeWeight: 4
+                });
+                polyline.setMap(map)
+            });
+
+            $.get("/api/intersection/{{ .branch }}",  function(data){
+                var nowBranch = 0;
+                for (var i = 0 ; i < data.length ; i++){
+                    var marker = new google.maps.Marker({
+                        map: map,
+                        position: data[i].Host,
+                    });
+                    markers.push(marker)
+                    for (var j = 0 ; j < data[i].Parent.length ; j++){
+                        nowBranch++;
+                    }
+                }
+
+                if(nowBranch != oldBranch){
+                    if(branch.length != 0){
+                        for (var i = 0 ; i < branch.length ; i++){
+                            branch.setMap(null);
+                        }
+                        branch = []
+                    }
+
+                    for(var i = 0 ; i < data.length ; i++){
+                        for (var j = 0 ; j < data[i].Parent.length ; j++){
+                            console.log(data[i].Parent[j])
+                            var pl = new google.maps.Polyline({
+                                path: [data[i].Host, data[i].Parent[j]],
+                                geodesic: true,
+                                strokeColor: '#00FF00',
+                                strokeOpacity: 1.0,
+                                strokeWeight: 4,
+                                map:map
+                            });
+                            branch.push(pl);
+                        }
+                    }
+                    oldBranch = nowBranch;
+                }
+            });
+
+        }, 10000);
+    }
+</script>
+<script async defer
+        src="https://maps.googleapis.com/maps/api/js?callback=initMap&libraries=geometry">
+</script>
+<script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+</body>
+</html>

@@ -29,6 +29,14 @@ type Polyline struct {
 
 func main(){
 	iris.Config.Render.Template.IsDevelopment = true
+
+	iris.Get("/relate/:branch", func (ctx *iris.Context){
+		b := ctx.Param("branch")
+		if err := ctx.Render("relate.html", map[string]string{"branch":b}) ; err != nil{
+			iris.Logger.Printf(err.Error())
+		}
+	});
+
 	iris.Get("/map/:branch", func (ctx *iris.Context){
 		b := ctx.Param("branch")
 		if err := ctx.Render("map.html", map[string]string{"branch":b}); err != nil {
