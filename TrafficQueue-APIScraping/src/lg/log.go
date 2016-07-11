@@ -2,7 +2,7 @@ package lg
 
 import "fmt"
 
-const debug = true
+const debug = false
 
 func PrintLog(s string, ss string){
 	if debug {

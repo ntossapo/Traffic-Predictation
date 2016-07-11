@@ -1,5 +1,7 @@
 package geo
 
+import "math"
+
 type GeoLimitSquare struct{
 	StartLat	float64
 	StopLat		float64
@@ -16,3 +18,8 @@ type Point struct {
 }
 
 type RandomPoint Point
+
+func (g *GeoLimitSquare) FindDiffLatLng(){
+	g.LatDiff = math.Abs(g.StartLat - g.StopLat)
+	g.LngDiff = math.Abs(g.StartLng - g.StopLng)
+}
