@@ -7,11 +7,8 @@ import (
 	"gopkg.in/mgo.v2/bson"
 	"unicode/utf8"
 	"strconv"
+	"geo"
 )
-
-type Last struct {
-	Last string	`bson:last`
-}
 
 type LatLng struct {
 	Lat	float64	`bson:"lat" json:"lat"`
@@ -29,6 +26,18 @@ type Polyline struct {
 
 func main(){
 	iris.Config.Render.Template.IsDevelopment = true
+
+	iris.Get("/region/node", func (ctx *iris.Context){
+		if err := ctx.Render("region-node.html", nil) ; err != nil{
+			iris.Logger.Printf(err.Error())
+		}
+	});
+
+	iris.Get("/region", func (ctx *iris.Context){
+		if err := ctx.Render("region.html", nil) ; err != nil{
+			iris.Logger.Printf(err.Error())
+		}
+	});
 
 	iris.Get("/relate/:branch", func (ctx *iris.Context){
 		b := ctx.Param("branch")
@@ -50,7 +59,95 @@ func main(){
 		}
 	})
 
-	iris.StaticWeb("/jquery", "./templates/jquery-3.1.0.min.js", 1)
+	iris.Get("/node/:id", func(ctx *iris.Context){
+		id := ctx.Param("id")
+		if utf8.RuneCountInString(id) <= 0{
+			id = "1"
+		}
+		if err := ctx.Render("node.html", map[string]string{"node":id}); err != nil {
+			iris.Logger.Printf(err.Error())
+		}
+	})
+
+	iris.Get("/api/region/node/:id", func (ctx *iris.Context){
+		id := ctx.Param("id")
+		if utf8.RuneCountInString(id) <= 0{
+			id = "1"
+		}
+		intId, _ := strconv.Atoi(id);
+		session, err := mgo.Dial("127.0.0.1")
+		if err != nil{
+			panic(err)
+		}
+		defer session.Close()
+
+		session.SetMode(mgo.Monotonic, true)
+
+		c := session.DB("GoTrafficQueue").C("worker")
+		cc := session.DB("GoTrafficQueue").C("visualize")
+
+		data := struct {
+			Node	int
+			Limit	geo.GeoLimitSquare
+		}{}
+
+		line := struct {
+			Node int
+			Polyline string
+		}{}
+
+		err = c.Find(bson.M{"node":intId}).One(&data)
+		if err != nil {
+			panic(err)
+		}
+		err = cc.Find(bson.M{"node":int(intId)}).One(&line)
+		if err != nil {
+			panic(err)
+		}
+
+		ctx.JSON(iris.StatusOK, map[string]interface{}{"node":data.Node, "limit":data.Limit, "line":line.Polyline})
+
+	})
+
+	iris.Get("/api/region/node", func(ctx *iris.Context) {
+		session, err := mgo.Dial("127.0.0.1")
+		if err != nil{
+			panic(err)
+		}
+		defer session.Close()
+
+		session.SetMode(mgo.Monotonic, true)
+
+		c := session.DB("GoTrafficQueue").C("region")
+
+		data := []struct {
+			Big	int
+			Geo	geo.GeoLimitSquare
+		}{}
+
+		c.Find(bson.M{"big":0}).All(&data)
+		ctx.JSON(iris.StatusOK, data)
+	})
+
+	iris.Get("/api/region", func(ctx *iris.Context){
+		session, err := mgo.Dial("127.0.0.1")
+		if err != nil{
+			panic(err)
+		}
+		defer session.Close()
+
+		session.SetMode(mgo.Monotonic, true)
+
+		c := session.DB("GoTrafficQueue").C("region")
+
+		data := struct {
+			Big	int
+			Geo	geo.GeoLimitSquare
+		}{}
+
+		c.Find(bson.M{"big":1}).One(&data)
+		ctx.JSON(iris.StatusOK, data)
+	})
 
 	iris.Get("/api/coverage", func(ctx *iris.Context){
 		session, err := mgo.Dial("127.0.0.1")
@@ -115,9 +212,9 @@ func main(){
 			log.Fatal(err)
 		}
 
-		last := Last{}
+		last := []map[string]string{}
 
-		err = c.Find(bson.M{}).One(&last)
+		err = c.Find(bson.M{}).All(&last)
 
 		ctx.JSON(iris.StatusOK, last)
 	})
@@ -126,5 +223,7 @@ func main(){
 	//	ctx.Redirect("/map", iris.StatusTemporaryRedirect)
 	//})
 
+
+	iris.StaticWeb("/jquery", "./templates/jquery-3.1.0.min.js", 1)
 	iris.Listen(":80")
 }

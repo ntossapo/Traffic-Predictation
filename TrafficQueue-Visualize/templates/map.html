@@ -2,53 +2,68 @@
 <html>
 <head>
     <style>
-       #map {
-        width: 100%;
-        height: 650px;
-      }
+        #map {
+            width: 100%;
+            height: 650px;
+        }
     </style>
     <title>Map with Marker that branch > than {{ .branch }}</title>
 </head>
 <body>
 <div id="map"></div>
 <script>
-      function initMap() {
+
+    function getRandomColor() {
+        var letters = '0123456789ABCDEF'.split('');
+        var color = '#';
+        for (var i = 0; i < 6; i++ ) {
+            color += letters[Math.floor(Math.random() * 16)];
+        }
+        return color;
+    }
+
+    function initMap() {
         var mapDiv = document.getElementById('map');
         var map = new google.maps.Map(mapDiv, {
             center: {lat: 7.971806, lng: 98.3385094},
             zoom:11
         });
 
-        var polyline = null;
+        var polylines = [];
         var markers = [];
         setInterval(function(){
-          if(polyline != null)
-            polyline.setMap(null);
+            for(var i = 0 ; i < polylines.length ; i++)
+                polylines[i].setMap(null);
 
-          $.get("/api/last", function(data){
-            polyline = new google.maps.Polyline({
-              path: google.maps.geometry.encoding.decodePath(data.Last),
-              geodesic: true,
-              strokeColor: '#FF0000',
-              strokeOpacity: 1.0,
-              strokeWeight: 4
+            polylines = [];
+
+            $.get("/api/last", function(data){
+                for(var i = 0 ; i < data.length ; i++){
+                    var polyline = new google.maps.Polyline({
+                        path: google.maps.geometry.encoding.decodePath(data[i].polyline),
+                        geodesic: true,
+                        strokeColor: getRandomColor(),
+                        strokeOpacity: 1.0,
+                        strokeWeight: 4
+                    });
+                    polyline.setMap(map)
+                    polylines.push(polyline);
+                }
             });
-            polyline.setMap(map)
-          });
 
-          $.get("/api/intersection/{{ .branch }}",  function(data){
-            console.log(data.length)
-            for (var i = 0 ; i < data.length ; i++){
-              var marker = new google.maps.Marker({
-                map: map,
-                position: data[i].Host,
-              });
-              markers.push(marker)
-            }
-          });
+            $.get("/api/intersection/{{ .branch }}",  function(data){
+                console.log(data.length)
+                for (var i = 0 ; i < data.length ; i++){
+                    var marker = new google.maps.Marker({
+                        map: map,
+                        position: data[i].Host,
+                    });
+                    markers.push(marker)
+                }
+            });
 
         }, 10000);
-      }
+    }
 </script>
 <script async defer
         src="https://maps.googleapis.com/maps/api/js?callback=initMap&libraries=geometry">
