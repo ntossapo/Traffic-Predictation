@@ -4,4 +4,5 @@ Predict about traffic using Jackson's network model in queueing theor. Experimen
 ## Library
 * https://github.com/kataras/iris
 * https://labix.org/mgo
-
+## Todo
+* 100% CPU mongo work -> use leaky bucket to hand on it
