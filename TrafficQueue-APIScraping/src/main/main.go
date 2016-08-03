@@ -19,6 +19,7 @@ import (
 	"lg"
 	"model"
 	"runtime"
+	"utils/vector"
 )
 
 const phuket_start_lat = 7.755442
@@ -31,7 +32,7 @@ const stop_lat = phuket_stop_lat
 const start_lng = phuket_start_lng
 const stop_lng = phuket_stop_lng
 
-const column_count = 5
+const column_count = 3
 
 func main(){
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -95,6 +96,22 @@ func regisNodeWorker(nodeNum int, currentGeoRegion geo.GeoLimitSquare, session *
 	c.Upsert(bson.M{"node":nodeNum}, bson.M{"node":nodeNum, "limit":currentGeoRegion})
 }
 
+func  isSameVector(newPoint geo.Point, model model.Model) bool{
+	result := false
+	deg1 := vector.Degree(model.Host, newPoint)
+	for i := 0 ; i < len(model.Parent) ; i++ {
+		deg2 := vector.Degree(model.Host, model.Parent[i])
+
+		if deg1 - deg2 < 15{
+			result = true
+		}else{
+			result = false
+		}
+	}
+
+	return result
+}
+
 func webScraping2 (nodeNum int, currentGeoRegion geo.GeoLimitSquare, ra *rand.Rand, ch chan int){
 	session, _ := mgo.Dial("127.0.0.1")
 	regisNodeWorker(nodeNum, currentGeoRegion, session)
@@ -139,7 +156,7 @@ func webScraping2 (nodeNum int, currentGeoRegion geo.GeoLimitSquare, ra *rand.Ra
 					}
 				}else{
 					lg.PrintLog("Found Record", fmt.Sprintf("Found Data %.5f, %.5f", roadLatLng[j].Lat, roadLatLng[j].Lng))
-					if !foundModel.ContainParent(roadLatLng[j+1]){
+					if !foundModel.ContainParent(roadLatLng[j+1]) && !isSameVector(roadLatLng[j+1], *foundModel){
 						lg.PrintLog("Found Record", fmt.Sprintf("Add relation %.5f, %.5f to %.5f, %.5f",
 							roadLatLng[j+1].Lat, roadLatLng[j+1].Lng,
 							roadLatLng[j].Lat, roadLatLng[j].Lng,
@@ -155,9 +172,11 @@ func webScraping2 (nodeNum int, currentGeoRegion geo.GeoLimitSquare, ra *rand.Ra
 					}
 				}
 			}
+			time.Sleep(time.Second * 3)
 		}
 		ch <- nodeNum
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Minute * 1)
+
 	}
 }
 

@@ -25,7 +25,7 @@ type Polyline struct {
 }
 
 func main(){
-	iris.Config.Render.Template.IsDevelopment = true
+	//iris.Config.Render.Template.IsDevelopment = true
 
 	iris.Get("/region/node", func (ctx *iris.Context){
 		if err := ctx.Render("region-node.html", nil) ; err != nil{
