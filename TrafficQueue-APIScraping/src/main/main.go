@@ -16,10 +16,10 @@ import (
 	"mongo"
 	"gopkg.in/mgo.v2/bson"
 	"time"
-	"lg"
 	"model"
 	"runtime"
 	"utils/vector"
+	"math"
 )
 
 const phuket_start_lat = 7.755442
@@ -32,7 +32,7 @@ const stop_lat = phuket_stop_lat
 const start_lng = phuket_start_lng
 const stop_lng = phuket_stop_lng
 
-const column_count = 3
+const column_count = 5
 
 func main(){
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -56,15 +56,18 @@ func main(){
 	defer session.Close()
 	mongo.AddLimitedRegion(session, currentGeoRegion)
 	nodes := createNodeRegion(currentGeoRegion, session)
+
 	channel := make(chan int, len(nodes))
+
 	for i, node := range nodes{
+	//for i := 0 ; i < 1 ; i ++{
 		go webScraping2(i, node, ra, channel)
 	}
 
 	for ;;{
 		select {
-		case r := <- channel:
-			fmt.Println("response from node ", r)
+		case <- channel:
+			//fmt.Println("response from node ", r)
 		}
 	}
 }
@@ -96,16 +99,24 @@ func regisNodeWorker(nodeNum int, currentGeoRegion geo.GeoLimitSquare, session *
 	c.Upsert(bson.M{"node":nodeNum}, bson.M{"node":nodeNum, "limit":currentGeoRegion})
 }
 
+//false do
+//true not do
 func  isSameVector(newPoint geo.Point, model model.Model) bool{
 	result := false
 	deg1 := vector.Degree(model.Host, newPoint)
 	for i := 0 ; i < len(model.Parent) ; i++ {
 		deg2 := vector.Degree(model.Host, model.Parent[i])
-
-		if deg1 - deg2 < 15{
-			result = true
-		}else{
-			result = false
+		fmt.Println("DEG", "deg1",deg1)
+		fmt.Println("DEG", "deg2",deg2)
+		fmt.Println("DEG", "Diff1",math.Abs(deg1-deg2))
+		if math.Abs(deg1-deg2) <= 15{
+			return true
+		}else if math.Abs((360+deg1) - deg2) <= 15{
+			fmt.Println("DEG", "Diff2", math.Abs((360+deg1) - deg2))
+			return true
+		}else if math.Abs((360+deg2) - deg1) <= 15{
+			fmt.Println("DEG", "Diff3",math.Abs((360+deg2) - deg1))
+			return true
 		}
 	}
 
@@ -114,6 +125,11 @@ func  isSameVector(newPoint geo.Point, model model.Model) bool{
 
 func webScraping2 (nodeNum int, currentGeoRegion geo.GeoLimitSquare, ra *rand.Rand, ch chan int){
 	session, _ := mgo.Dial("127.0.0.1")
+
+	timeRand := 5 + rand.Intn(60 - 5)
+	//fmt.Println("SLEEP", "Thread", nodeNum, "Sleep", timeRand, "Second")
+	time.Sleep(time.Second * time.Duration(timeRand))
+
 	regisNodeWorker(nodeNum, currentGeoRegion, session)
 	c := session.DB("GoTrafficQueue").C("road_relate")
 	lc := session.DB("GoTrafficQueue").C("visualize")
@@ -122,13 +138,22 @@ func webScraping2 (nodeNum int, currentGeoRegion geo.GeoLimitSquare, ra *rand.Ra
 		rand1 := randomPosition(currentGeoRegion, *ra)
 		rand2 := randomPosition(currentGeoRegion, *ra)
 		grr := requestGoogleRouteApi(rand1, rand2)
-		lg.PrintLog("Position", fmt.Sprintf("%.5f->%.5f, %.5f->%.5f",rand2.Lat, rand1.Lat, rand2.Lng, rand1.Lng))
+		//fmt.Println("Position", fmt.Sprintf("%.5f->%.5f, %.5f->%.5f",rand2.Lat, rand1.Lat, rand2.Lng, rand1.Lng))
 		if grr.Status != "OK"{
-			lg.PrintLog("ERR", "STATUS=" + grr.Status)
+			//fmt.Println("ERR", "STATUS=" + grr.Status)
+			switch grr.Status {
+			case `ZERO_RESULTS`:
+				time.Sleep(time.Second * 3)
+				break;
+			case `OVER_QUERY_LIMIT`:
+				timeRand := 5 + rand.Intn(60 - 5)
+				fmt.Println("SLEEP", "OVER_QUERY_LIMIT", "Thread", nodeNum, "Sleep", timeRand, "Second")
+				time.Sleep(time.Second * time.Duration(timeRand))
+			}
 			continue
-		}
 
-		lg.PrintLog("Route", fmt.Sprintf("Found %d Routes", len(grr.Routes)))
+		}
+		//fmt.Println("Route", fmt.Sprintf("Found %d Routes", len(grr.Routes)))
 		for i := 0 ; i < len(grr.Routes); i++{
 			pc.Insert(bson.M{"polyline":grr.Routes[i].OverviewPolyline.Points})
 			lc.Upsert(bson.M{"node":nodeNum}, bson.M{"node":nodeNum, "polyline":grr.Routes[i].OverviewPolyline.Points})
@@ -145,19 +170,20 @@ func webScraping2 (nodeNum int, currentGeoRegion geo.GeoLimitSquare, ra *rand.Ra
 					}}).One(&foundModel)
 				if err != nil {
 					if err.Error() == "not found"{
-						lg.PrintLog("New Record", fmt.Sprintf("Add new Data %.5f, %.5f", roadLatLng[j].Lat, roadLatLng[j].Lng))
+						//fmt.Println("New Record", fmt.Sprintf("Add new Data %.5f, %.5f", roadLatLng[j].Lat, roadLatLng[j].Lng))
 						newModel := &model.Model{}
 						newModel.NewInstance(roadLatLng[j], nil)
 						newModel.Append(roadLatLng[j+1])
 						err := c.Insert(newModel)
 						if err != nil {
-							lg.PrintLog("Error", err.Error())
+							//fmt.Println("Error", err.Error())
 						}
 					}
 				}else{
-					lg.PrintLog("Found Record", fmt.Sprintf("Found Data %.5f, %.5f", roadLatLng[j].Lat, roadLatLng[j].Lng))
+					//fmt.Println("Found Record", fmt.Sprintf("Found Data %.5f, %.5f", roadLatLng[j].Lat, roadLatLng[j].Lng))
 					if !foundModel.ContainParent(roadLatLng[j+1]) && !isSameVector(roadLatLng[j+1], *foundModel){
-						lg.PrintLog("Found Record", fmt.Sprintf("Add relation %.5f, %.5f to %.5f, %.5f",
+					//if !foundModel.ContainParent(roadLatLng[j+1]){
+						fmt.Println("Found Record", fmt.Sprintf("Add relation %.5f, %.5f to %.5f, %.5f",
 							roadLatLng[j+1].Lat, roadLatLng[j+1].Lng,
 							roadLatLng[j].Lat, roadLatLng[j].Lng,
 						))
@@ -165,18 +191,16 @@ func webScraping2 (nodeNum int, currentGeoRegion geo.GeoLimitSquare, ra *rand.Ra
 						oldModel.Append(roadLatLng[j+1])
 						err := c.Update(foundModel, oldModel)
 						if err != nil {
-							lg.PrintLog("Error", err.Error())
+							//fmt.Println("Error", err.Error())
 						}
 					}else{
-						lg.PrintLog("Already Relation", "Found Already Relation Road")
+						//fmt.Println("Already Relation", "Found Already Relation Road")
 					}
 				}
 			}
-			time.Sleep(time.Second * 3)
 		}
 		ch <- nodeNum
 		time.Sleep(time.Minute * 1)
-
 	}
 }
 
